@@ -222,8 +222,10 @@ class CI_Config {
 			return $this->slash_item('base_url').$this->item('index_page');
 		}
 
-		if ($this->item('enable_query_strings') == FALSE)
+		//if ($this->item('enable_query_strings') == FALSE)
+		if ($this->item('enable_query_strings') == FALSE || $this->item('uri_protocol') == 'PATH_INFO')  
 		{
+			
 			if (is_array($uri))
 			{
 				$uri = implode('/', $uri);

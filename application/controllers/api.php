@@ -16,7 +16,7 @@ class Api extends CI_Controller {
 		echo '<p>this data is all scraped from http://austin2011.sched.org/type/music/print, with musicbrainz IDs for bands who have them and lat/lng combos for venues google knows about.';
 		echo 'i plan to rescrape frequently so this data should be fairly up to date.</p>';
 		
-		echo '<p><strong>note</strong> a few venues have empty lat/lngs (sorry) and quite a depressing majority of bands have no musicbrainz id (975/1393). will work on improving this</p>';
+		echo '<p><strong>note</strong> a few venues have empty lat/lngs (sorry) and a couple of hundred of the more obscure bands have no musicbrainz id (384/1393).';
 		echo '<h2>api endpoints</h2>';
 		echo '<h3>gigsbyband</h3>';
 		echo '<ul>';
@@ -53,15 +53,17 @@ class Api extends CI_Controller {
 			$this->db->order_by('band_name');
 			$this->db->select('band_name, musicbrainz');
 			$bands = $this->db->get('bands')->result_array();
-			echo json_encode(array('status' => 'success', 'response' => array('bands' => $bands)));
+			$response = array('status' => 'success', 'response' => array('bands' => $bands));
+			$this->process_json($response);
 			die;
 		}
 		if(!in_array($mode, array('musicbrainz', 'name'))) {
-			echo json_encode(array('status' => 'error', 'response' => 'incorrect mode (accepts "musicbrainz" or "name" - you specified "'.$mode.'"'));
+			$response = array('status' => 'error', 'response' => 'incorrect mode (accepts "musicbrainz" or "name" - you specified "'.$mode.'"');
+			$this->process_json($response);
 			die;
 		}
-		if(!$mode) { echo json_encode(array('status' => 'error', 'response' => 'please enter a mode (accepts "musicbrainz" or "name"')); die;  }
-		if(!$band) { echo json_encode(array('status' => 'error', 'response' => 'please enter a band name or musicbrainz id')); die;  }
+		if(!$mode) { $response = array('status' => 'error', 'response' => 'please enter a mode (accepts "musicbrainz" or "name"'); $this->process_json($response); die;  }
+		if(!$band) { $response = array('status' => 'error', 'response' => 'please enter a band name or musicbrainz id'); $this->process_json($response); die;  }
 		
 		$band = urldecode($band);
 		$response = array();
@@ -73,25 +75,41 @@ class Api extends CI_Controller {
 		}
 		$band = $this->db->get('bands')->row_array();
 		if(empty($band)) {
-			echo json_encode(array('status' => 'error', 'response' => 'no band found, sorry')); die;
+			$response = array('status' => 'error', 'response' => 'no band found, sorry'); 
+			$this->process_json($response);
+			die;
 		}
 		$this->db->select('date, start_time, end_time, venue_name, lat, lng, id, url');
 		$this->db->join('venues', 'listings.venue_id = venues.venue_id');
 		$gigs = $this->db->get_where('listings', array('band_id' => $band['band_id']))->result_array();
-		$response = array('status' => 'success', 'response' => array('band' => $band, 'gigs' => $gigs));
-	
-		echo json_encode($response);
 		
+		$response = array('status' => 'success', 'response' => array('band' => $band, 'gigs' => $gigs));		
+		$this->process_json($response);
+		
+	}
+	
+	function process_json($response)
+	{
+		header('Content-Type: text/javascript; charset=utf8');
+	    header('Access-Control-Allow-Origin: http://www.threechords.org/sxsw-api/');
+	    header('Access-Control-Max-Age: 3628800');
+	    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
+		
+		if(isset($_GET['callback'])) {
+			echo $_GET['callback'] . '('.json_encode($response).')';
+		} else {
+			echo json_encode($response);	
+		}
 	}
 	
 	function gigsbyvenue($venue = NULL)
 	{
 		if(!$venue) { 
-			//echo json_encode(array('status' => 'error', 'response' => 'please enter a venue name')); die;
 			$this->db->select('venue_name, lat, lng');
 			$this->db->order_by('venue_name');
 			$venues = $this->db->get('venues')->result_array();
-			echo json_encode(array('status' => 'success', 'response' => array('venues' => $venues)));
+			$response = array('status' => 'success', 'response' => array('venues' => $venues));
+			$this->process_json($response);
 			die;
 		}
 		
@@ -101,14 +119,15 @@ class Api extends CI_Controller {
 		$this->db->like('venue_name', $venue);
 		$venue = $this->db->get('venues')->row_array();
 		if(empty($venue)) {
-			echo json_encode(array('status' => 'error', 'response' => 'no venue found, sorry')); die;
+			$response = array('status' => 'error', 'response' => 'no venue found, sorry'); 
+			$this->process_json($response);
+			die;
 		}
 		$this->db->select('date, start_time, end_time, band_name, musicbrainz, id, url');
 		$this->db->join('bands', 'listings.band_id = bands.band_id');
 		$gigs = $this->db->get_where('listings', array('venue_id' => $venue['venue_id']))->result_array();
 		$response = array('status' => 'success', 'response' => array('venue' => $venue, 'gigs' => $gigs));
-	
-		echo json_encode($response);
+		$this->process_json($response);
 		
 	}	
 	
@@ -119,7 +138,8 @@ class Api extends CI_Controller {
 			$this->db->order_by('date');
 			$this->db->select('date, COUNT(id) AS num_gigs');
 			$dates = $this->db->get('listings')->result_array();
-			echo json_encode(array('status' => 'success', 'response' => array('dates' => $dates)));
+			$response = array('status' => 'success', 'response' => array('dates' => $dates));
+			$this->process_json($response);
 			die;
 		}
 		
@@ -127,20 +147,43 @@ class Api extends CI_Controller {
 		
 		$response = array();
 		
-		//$this->db->select('date, start_time, end_time, band_name, musicbrainz, id, url');
 		$this->db->join('bands', 'listings.band_id = bands.band_id');
 		$this->db->join('venues', 'listings.venue_id = venues.venue_id');
 		$gigs = $this->db->get_where('listings', array('date' => $date))->result_array();
 		if(empty($gigs)) {
-			echo json_encode(array('status' => 'error', 'response' => 'no gigs on that date, sorry')); die;
+			$response = array('status' => 'error', 'response' => 'no gigs on that date, sorry'); 
+			$this->process_json($response);
+			die;
 		}
 		$response = array('status' => 'success', 'response' => array('gigs' => $gigs));
-	
-		echo json_encode($response);
+		$this->process_json($response);
 		
 	}	
 	
-	
+	function test()
+	{
+		set_time_limit(50000000);
+		$bands = $this->db->get_where('bands', array('musicbrainz' => ''))->result_array();
+		foreach($bands as $b) {	
+			$url = 'http://musicbrainz.org/ws/1/artist/?type=xml&query=artist:"'.urlencode(trim($b['band_name'])).'"';
+			$xml = simplexml_load_file($url);
+			$list = $xml->{'artist-list'}->artist;
+			if($list) {
+				foreach($list as $artist) {
+					$id = "".$artist->attributes()->id."";
+					parse_str($id);
+					echo 'updated ' . $b['band_name'] . ' to ' . $id . '<br />';
+					
+					$this->db->where('band_id', $b['band_id']);
+					$this->db->update('bands', array('musicbrainz' => $id));
+					
+				}
+			} else {
+				echo "no match for " . $b['band_name'] . '<br />';
+			}
+			sleep(1);
+		}
+	}
 	
 }
 ?>
